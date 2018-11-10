@@ -1,0 +1,127 @@
+---
+title: "Modèle simple"
+author: "Géraud Dugé de Bernonville"
+date: "29 septembre 2018"
+output: html_document
+---
+
+```{r}
+library(keras)
+```
+
+# Définition des constantes
+
+```{r}
+img_width <- 128
+img_height <- 128
+train_data_dir <-  "/home/geraud/data/alphashifumi/train"
+validation_data_dir <-  "/home/geraud/data/alphashifumi/test"
+nb_train_samples <-  4125
+nb_validation_samples <-  466 
+batch_size <-  50
+epochs <-  50
+model_output_dir <- './target/models/'
+augmented_data <- './target/generated/'
+
+if (!dir.exists(model_output_dir)) dir.create(model_output_dir, recursive = TRUE)
+if (!dir.exists(augmented_data)) dir.create(augmented_data, recursive = TRUE)
+```
+
+# Keras training
+
+
+```{r}
+model <- keras_model_sequential()
+model %>%
+    layer_flatten(input_shape = c(128, 128, 3)) %>%
+    layer_dense(units = 1024, activation = 'relu') %>%
+    layer_dense(units = 1024, activation = 'relu') %>%
+    layer_dense(units = 5, activation = 'softmax', name = 'output')
+```
+
+On _compile_ le modèle :
+
+```{r}
+model %>% compile(optimizer = 'rmsprop',
+                  loss = 'categorical_crossentropy',
+                  metrics = c('accuracy'))
+```
+
+Notre nouveau modèle ressemble à ça :
+
+```{r}
+summary(model)
+```
+
+# Chargement des données
+
+On configure les générateurs:
+```{r}
+train_datagen <- image_data_generator(
+    rescale = 1./255,
+    horizontal_flip = TRUE,
+    fill_mode = "nearest",
+    zoom_range = 0.3,
+    width_shift_range = 0.3,
+    height_shift_range = 0.3,
+    rotation_range = 30,
+    data_format = 'channels_last')
+
+test_datagen <- image_data_generator(
+    rescale = 1./255,
+    horizontal_flip = TRUE,
+    fill_mode = "nearest",
+    zoom_range = 0.3,
+    width_shift_range = 0.3,
+    height_shift_range = 0.3,
+    rotation_range = 30,
+    data_format = 'channels_last')
+
+```
+
+Chargement des images:
+
+```{r}
+train_generator <- flow_images_from_directory(
+    train_data_dir,
+    generator = train_datagen,
+    target_size = c(img_height, img_width),
+    batch_size = batch_size, 
+    class_mode = "categorical",
+    save_to_dir = augmented_data)
+
+validation_generator <- flow_images_from_directory(
+    validation_data_dir,
+    generator = train_datagen,
+    target_size = c(img_height, img_width),
+    class_mode = "categorical")
+
+```
+
+# Entrainement !
+
+```{r}
+history <- model %>% fit_generator(train_generator,
+                                   validation_data = validation_generator,
+                                   steps_per_epoch = 5,
+                                   validation_steps = 10,
+                                   epochs = 5)
+
+```
+
+On peut surveiller la courbe d'apprentissage :
+
+```{r}
+plot(history)
+```
+
+# Sauvegarde du modèle
+
+```{r}
+save_model_hdf5(model, paste0(model_output_dir, 'simplehdf5'))
+```
+
+```{r}
+export_savedmodel(model, paste0(model_output_dir, 'simplesavedmodel'))
+```
+
